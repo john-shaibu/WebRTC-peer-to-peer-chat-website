@@ -2,6 +2,15 @@ let APP_ID = "b927a28b108e409ba4ee6e3b891f80aa";
 let token = null;
 let uid = String(Math.floor(Math.random() * 10000))
 
+let queryString = window.location.search
+let urlParams = new URLSearchParams(queryString)
+
+let roomId = urlParams.get('room')
+
+if(!roomId){
+    window.location = 'lobby.html';
+}
+
 let client;
 let channel;
 
@@ -15,19 +24,35 @@ let init = async () => {
     client = await AgoraRTM.createInstance(APP_ID)
     await client.login({uid, token})
 
-    channel = client.createChannel('main')
+    channel = client.createChannel(roomId)
     await channel.join()
 
     channel.on("MemberJoined", handleUserJoined)
+    channel.on('MemberLeft', handleUserLeft)
 
     client.on('MessageFromPeer', handleMessageFromPeer)
 
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
         document.getElementById('user-1').srcObject = localStream;
     } catch (error) {
         console.error('Error initializing local media stream:', error);
     }
+}
+
+let constraints = {
+    video: {
+        width:{min:640, ideal:1920, max:1920},
+        width:{min:480, ideal:1080, max:1080},
+    },
+    audio: true
+
+}
+
+let handleUserLeft = (MemberID) => {
+    document.getElementById('user-2').style.display = 'none';
+    document.getElementById('user-1').classList.remove('smallFrame')
+
 }
 
 let handleMessageFromPeer = async (message, MemberID) => {
@@ -66,6 +91,8 @@ let createPeerConnection = async(MemberID) => {
 
     remoteStream = new MediaStream()
     document.getElementById('user-2').srcObject = remoteStream
+    document.getElementById('user-2').style.display = 'block';
+    document.getElementById('user-1').classList.add('smallFrame')
 
     if(!localStream){
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -115,5 +142,40 @@ let addAnswer = async (answer) => {
         peerConnection.setRemoteDescription(answer)
     }
 }
+
+let leaveChannel = async () => {
+    await channel.leave()
+    await client.logout()
+}
+
+let toggleCamera = async () =>{
+    let videoTracks = localStream.getTracks().find(track => track.kind === 'video')
+
+    if(videoTracks.enabled) {
+        videoTracks.enabled = false
+        document.getElementById('camera-btn').style.backgroundColor = `rgb(255, 80, 80)`
+    } else{
+        videoTracks.enabled = true
+        document.getElementById('camera-btn').style.backgroundColor = `rgb(179, 102, 249, .9)`
+
+    }
+}
+let toggleMic = async () =>{
+    let audioTracks = localStream.getTracks().find(track => track.kind === 'audio')
+
+    if(audioTracks.enabled) {
+        audioTracks.enabled = false
+        document.getElementById('mic-btn').style.backgroundColor = `rgb(255, 80, 80)`
+    } else{
+        audioTracks.enabled = true
+        document.getElementById('mic-btn').style.backgroundColor = `rgb(179, 102, 249, .9)`
+
+    }
+}
+window.addEventListener('beforeunload', leaveChannel)
+
+document.getElementById('camera-btn').addEventListener('click', toggleCamera)
+document.getElementById('mic-btn').addEventListener('click', toggleMic)
+
 
 init()
